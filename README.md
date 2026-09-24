@@ -12,7 +12,8 @@ Rust (user-space) virtual machine for eBPF
 
 CI runs Linux and Windows checks in GitHub Actions. Download `lcov.info` from the
 `coverage` artifact on a completed [CI run](https://github.com/volnlabs/rbpf/actions/workflows/test.yaml)
-with a successful coverage job. Reports are retained for 14 days.
+with a successful coverage job. Coverage totals also appear in the run summary.
+Reports are retained for 14 days.
 
 * [Description](#description)
 * [Link to the crate](#link-to-the-crate)

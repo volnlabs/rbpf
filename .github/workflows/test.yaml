@@ -18,6 +18,7 @@ jobs:
   build_and_test:
     name: Linux (${{ matrix.toolchain }}, ${{ matrix.features }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +38,12 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
           components: clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.features }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build with ${{ matrix.toolchain }}, ${{ matrix.features }}
         run: |
@@ -61,6 +68,7 @@ jobs:
   windows:
     name: Windows (${{ matrix.toolchain }})
     runs-on: windows-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +84,11 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Build with default features
         run: cargo build
 
@@ -88,6 +101,7 @@ jobs:
   conformance:
     name: Check eBPF conformance
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       # Exclude features not supported by rbpf yet.
       # atomic operations - https://github.com/qmonnet/rbpf/issues/47
@@ -103,6 +117,11 @@ jobs:
 
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build plug-in
         run: |
@@ -145,6 +164,7 @@ jobs:
   coverage:
     name: Generate code coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -156,6 +176,12 @@ jobs:
         with:
           components: llvm-tools-preview
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target/llvm-cov-target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Install development tools
         uses: taiki-e/install-action@v2
         with:
@@ -164,6 +190,15 @@ jobs:
       - name: Generate coverage report
         run: |
           cargo llvm-cov --lcov --all --all-features --all-targets --output-path lcov.info
+
+      - name: Summarize coverage
+        run: |
+          {
+            echo '### Code coverage'
+            echo '```text'
+            cargo llvm-cov report
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
