@@ -5,14 +5,18 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.after }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build_and_test:
-    name: Build and test package
+    name: Linux (${{ matrix.toolchain }}, ${{ matrix.features }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,13 +28,14 @@ jobs:
             features: --no-default-features
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Install toolchain (${{ matrix.toolchain }})
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          override: true
           components: clippy
 
       - name: Build with ${{ matrix.toolchain }}, ${{ matrix.features }}
@@ -53,8 +58,35 @@ jobs:
         run: |
           cargo +${{ matrix.toolchain }} clippy ${{ matrix.features }}
 
-  conformance_and_coverage:
-    name: Check eBPF conformance and code coverage
+  windows:
+    name: Windows (${{ matrix.toolchain }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.91.0", beta, nightly]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain (${{ matrix.toolchain }})
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Build with default features
+        run: cargo build
+
+      - name: Build with all features
+        run: cargo build --all-features
+
+      - name: Test with all features
+        run: cargo test --all-features
+
+  conformance:
+    name: Check eBPF conformance
     runs-on: ubuntu-latest
     env:
       # Exclude features not supported by rbpf yet.
@@ -65,13 +97,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install toolchain (${{ matrix.toolchain }})
-        uses: actions-rs/toolchain@v1
+        uses: actions/checkout@v7
         with:
-          toolchain: nightly
-          override: true
+          persist-credentials: false
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: Build plug-in
         run: |
@@ -79,42 +110,65 @@ jobs:
 
       - name: Run BPF conformance tests - Interpreter
         run: |
-          docker run -v ${{github.workspace}}:/rbpf --rm \
-          "${{ env.CONFORMANCE_IMAGE }}" \
+          docker run -v "$GITHUB_WORKSPACE:/rbpf" --rm \
+          "$CONFORMANCE_IMAGE" \
           bin/bpf_conformance_runner --test_file_directory tests \
           --plugin_path /rbpf/target/release/examples/rbpf_plugin \
-          --exclude_regex "${{ env.KNOWN_FAILURES }}"
+          --exclude_regex "$KNOWN_FAILURES"
 
-      # JIT tests results are ignored due to https://github.com/qmonnet/rbpf/issues/60
+      # JIT conformance remains non-blocking due to https://github.com/qmonnet/rbpf/issues/60
       - name: Run BPF conformance tests - JIT
+        id: jit
+        continue-on-error: true
         run: |
-          docker run -v ${{github.workspace}}:/rbpf --rm \
-          "${{ env.CONFORMANCE_IMAGE }}" \
+          docker run -v "$GITHUB_WORKSPACE:/rbpf" --rm \
+          "$CONFORMANCE_IMAGE" \
           bin/bpf_conformance_runner --test_file_directory tests \
           --plugin_path /rbpf/target/release/examples/rbpf_plugin \
-          --exclude_regex "${{ env.KNOWN_FAILURES }}"  \
-          --plugin_options "--jit" || true
+          --exclude_regex "$KNOWN_FAILURES" \
+          --plugin_options "--jit"
+
+      - name: Report non-blocking JIT failure
+        if: ${{ always() && steps.jit.outcome == 'failure' }}
+        run: |
+          echo 'JIT conformance failed (non-blocking). See the JIT step log and [upstream issue #60](https://github.com/qmonnet/rbpf/issues/60).' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run BPF conformance tests - Cranelift
         run: |
-          docker run -v ${{github.workspace}}:/rbpf --rm \
-          "${{ env.CONFORMANCE_IMAGE }}" \
+          docker run -v "$GITHUB_WORKSPACE:/rbpf" --rm \
+          "$CONFORMANCE_IMAGE" \
           bin/bpf_conformance_runner --test_file_directory tests \
           --plugin_path /rbpf/target/release/examples/rbpf_plugin \
-          --exclude_regex "lock"  \
+          --exclude_regex "lock" \
           --plugin_options "--cranelift"
 
+  coverage:
+    name: Generate code coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools-preview
+
       - name: Install development tools
-        uses: taiki-e/install-action@v1.14.2
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
 
       - name: Generate coverage report
         run: |
-          cargo llvm-cov --lcov --all --all-features --all-targets > lcov.info
+          cargo llvm-cov --lcov --all --all-features --all-targets --output-path lcov.info
 
-      - name: Upload coverage to coveralls
-        uses: coverallsapp/github-action@master
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: lcov.info
+          name: coverage
+          path: lcov.info
+          retention-days: 14
+          if-no-files-found: error

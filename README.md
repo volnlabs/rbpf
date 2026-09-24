@@ -7,10 +7,12 @@
 
 Rust (user-space) virtual machine for eBPF
 
-[![Build Status](https://github.com/qmonnet/rbpf/actions/workflows/test.yaml/badge.svg)](https://github.com/qmonnet/rbpf/actions/workflows/test.yaml)
-[![Build status](https://ci.appveyor.com/api/projects/status/ia74coeuhxtrcvsk/branch/main?svg=true)](https://ci.appveyor.com/project/qmonnet/rbpf/branch/main)
-[![Coverage Status](https://coveralls.io/repos/github/qmonnet/rbpf/badge.svg?branch=main)](https://coveralls.io/github/qmonnet/rbpf?branch=main)
+[![Build Status](https://github.com/volnlabs/rbpf/actions/workflows/test.yaml/badge.svg)](https://github.com/volnlabs/rbpf/actions/workflows/test.yaml)
 [![Crates.io](https://img.shields.io/crates/v/rbpf.svg)](https://crates.io/crates/rbpf)
+
+CI runs Linux and Windows checks in GitHub Actions. Download `lcov.info` from the
+`coverage` artifact on a completed [CI run](https://github.com/volnlabs/rbpf/actions/workflows/test.yaml)
+with a successful coverage job. Reports are retained for 14 days.
 
 * [Description](#description)
 * [Link to the crate](#link-to-the-crate)
