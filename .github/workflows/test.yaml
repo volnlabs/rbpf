@@ -15,6 +15,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  aarch64_jit:
+    name: AArch64 JIT (${{ matrix.features }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - features: --features aarch64-jit
+            bare_metal: false
+          - features: --no-default-features --features aarch64-jit
+            bare_metal: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-none
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: aarch64-jit-${{ matrix.bare_metal }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build all native targets
+        run: cargo build --all-targets ${{ matrix.features }}
+
+      - name: Test on native AArch64
+        run: cargo test ${{ matrix.features }}
+
+      - name: Check bare-metal compiler
+        if: matrix.bare_metal
+        run: |
+          cargo check --lib --target aarch64-unknown-none \
+            --no-default-features --features aarch64-jit
+
   build_and_test:
     name: Linux (${{ matrix.toolchain }}, ${{ matrix.features }})
     runs-on: ubuntu-latest

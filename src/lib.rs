@@ -37,6 +37,8 @@ use core::ops::Range;
 use stack::{StackUsage, StackVerifier};
 
 mod asm_parser;
+#[cfg(feature = "aarch64-jit")]
+pub mod aarch64;
 pub mod assembler;
 #[cfg(feature = "cranelift")]
 mod cranelift;
@@ -45,7 +47,7 @@ pub mod ebpf;
 pub mod helpers;
 pub mod insn_builder;
 mod interpreter;
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 mod jit;
 #[cfg(not(feature = "std"))]
 mod no_std_error;
@@ -175,9 +177,9 @@ struct MetaBuff {
 pub struct EbpfVmMbuff<'a> {
     prog: Option<&'a [u8]>,
     verifier: Verifier,
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     jit: Option<jit::JitMemory<'a>>,
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     custom_exec_memory: Option<&'a mut [u8]>,
     #[cfg(feature = "cranelift")]
     cranelift_prog: Option<cranelift::CraneliftProgram>,
@@ -215,9 +217,9 @@ impl<'a> EbpfVmMbuff<'a> {
         Ok(EbpfVmMbuff {
             prog,
             verifier: verifier::check,
-            #[cfg(not(windows))]
+            #[cfg(all(target_arch = "x86_64", not(windows)))]
             jit: None,
-            #[cfg(all(not(windows), not(feature = "std")))]
+            #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
             custom_exec_memory: None,
             #[cfg(feature = "cranelift")]
             cranelift_prog: None,
@@ -349,7 +351,7 @@ impl<'a> EbpfVmMbuff<'a> {
     /// // Use mmap or other means to modify the permissions of the memory to be executable.
     /// vm.set_jit_exec_memory(&mut memory);
     /// ```
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     pub fn set_jit_exec_memory(&mut self, memory: &'a mut [u8]) -> Result<(), Error> {
         self.custom_exec_memory = Some(memory);
         Ok(())
@@ -497,9 +499,10 @@ impl<'a> EbpfVmMbuff<'a> {
     /// // Instantiate a VM.
     /// let mut vm = rbpf::EbpfVmMbuff::new(Some(prog)).unwrap();
     ///
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub fn jit_compile(&mut self) -> Result<(), Error> {
         let prog = match self.prog {
             Some(prog) => prog,
@@ -573,17 +576,17 @@ impl<'a> EbpfVmMbuff<'a> {
     /// // Instantiate a VM.
     /// let mut vm = rbpf::EbpfVmMbuff::new(Some(prog)).unwrap();
     ///
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     ///
     /// // Provide both a reference to the packet data, and to the metadata buffer.
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// unsafe {
     ///     let res = vm.execute_program_jit(mem, &mut mbuff).unwrap();
     ///     assert_eq!(res, 0x2211);
     /// }
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub unsafe fn execute_program_jit(
         &self,
         mem: &mut [u8],
@@ -963,7 +966,7 @@ impl<'a> EbpfVmFixedMbuff<'a> {
     /// // Use mmap or other means to modify the permissions of the memory to be executable.
     /// vm.set_jit_exec_memory(&mut memory);
     /// ```
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     pub fn set_jit_exec_memory(&mut self, memory: &'a mut [u8]) -> Result<(), Error> {
         self.parent.custom_exec_memory = Some(memory);
         Ok(())
@@ -1126,9 +1129,10 @@ impl<'a> EbpfVmFixedMbuff<'a> {
     /// // Instantiate a VM. Note that we provide the start and end offsets for mem pointers.
     /// let mut vm = rbpf::EbpfVmFixedMbuff::new(Some(prog), 0x40, 0x50).unwrap();
     ///
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub fn jit_compile(&mut self) -> Result<(), Error> {
         let prog = match self.parent.prog {
             Some(prog) => prog,
@@ -1196,11 +1200,11 @@ impl<'a> EbpfVmFixedMbuff<'a> {
     /// // Instantiate a VM. Note that we provide the start and end offsets for mem pointers.
     /// let mut vm = rbpf::EbpfVmFixedMbuff::new(Some(prog), 0x40, 0x50).unwrap();
     ///
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     ///
     /// // Provide only a reference to the packet data. We do not manage the metadata buffer.
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// unsafe {
     ///     let res = vm.execute_program_jit(mem).unwrap();
     ///     assert_eq!(res, 0xdd);
@@ -1208,7 +1212,7 @@ impl<'a> EbpfVmFixedMbuff<'a> {
     /// ```
     // This struct redefines the `execute_program_jit()` function, in order to pass the offsets
     // associated with the fixed mbuff.
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub unsafe fn execute_program_jit(&mut self, mem: &'a mut [u8]) -> Result<u64, Error> {
         // If packet data is empty, do not send the address of an empty slice; send a null pointer
         //  as first argument instead, as this is uBPF's behavior (empty packet should not happen
@@ -1515,7 +1519,7 @@ impl<'a> EbpfVmRaw<'a> {
     /// // Use mmap or other means to modify the permissions of the memory to be executable.
     /// vm.set_jit_exec_memory(&mut memory);
     /// ```
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     pub fn set_jit_exec_memory(&mut self, memory: &'a mut [u8]) -> Result<(), Error> {
         self.parent.custom_exec_memory = Some(memory);
         Ok(())
@@ -1644,9 +1648,10 @@ impl<'a> EbpfVmRaw<'a> {
     ///
     /// let mut vm = rbpf::EbpfVmRaw::new(Some(prog)).unwrap();
     ///
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub fn jit_compile(&mut self) -> Result<(), Error> {
         let prog = match self.parent.prog {
             Some(prog) => prog,
@@ -1711,16 +1716,16 @@ impl<'a> EbpfVmRaw<'a> {
     ///
     /// let mut vm = rbpf::EbpfVmRaw::new(Some(prog)).unwrap();
     ///
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     ///
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// unsafe {
     ///     let res = vm.execute_program_jit(mem).unwrap();
     ///     assert_eq!(res, 0x22cc);
     /// }
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub unsafe fn execute_program_jit(&self, mem: &'a mut [u8]) -> Result<u64, Error> {
         let mut mbuff = vec![];
         unsafe { self.parent.execute_program_jit(mem, &mut mbuff) }
@@ -1974,7 +1979,7 @@ impl<'a> EbpfVmNoData<'a> {
     /// // Use mmap or other means to modify the permissions of the memory to be executable.
     /// vm.set_jit_exec_memory(&mut memory);
     /// ```
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     pub fn set_jit_exec_memory(&mut self, memory: &'a mut [u8]) -> Result<(), Error> {
         self.parent.set_jit_exec_memory(memory)
     }
@@ -2071,9 +2076,10 @@ impl<'a> EbpfVmNoData<'a> {
     ///
     /// let mut vm = rbpf::EbpfVmNoData::new(Some(prog)).unwrap();
     ///
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub fn jit_compile(&mut self) -> Result<(), Error> {
         self.parent.jit_compile()
     }
@@ -2122,16 +2128,16 @@ impl<'a> EbpfVmNoData<'a> {
     ///
     /// let mut vm = rbpf::EbpfVmNoData::new(Some(prog)).unwrap();
     ///
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// vm.jit_compile();
     ///
-    /// # #[cfg(all(not(windows), feature = "std"))]
+    /// # #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     /// unsafe {
     ///     let res = vm.execute_program_jit().unwrap();
     ///     assert_eq!(res, 0x1122);
     /// }
     /// ```
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     pub unsafe fn execute_program_jit(&self) -> Result<u64, Error> {
         unsafe { self.parent.execute_program_jit(&mut []) }
     }

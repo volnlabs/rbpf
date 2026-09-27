@@ -3,7 +3,7 @@ extern crate rbpf;
 
 use rbpf::ebpf::{self, Insn};
 
-#[cfg(all(not(windows), not(feature = "std")))]
+#[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
 fn alloc_exec_memory() -> Box<[u8]> {
     let size = 4096;
     let layout = std::alloc::Layout::from_size_align(size, 4096).unwrap();
@@ -119,9 +119,9 @@ fn test_jit_xadd_w_dw() {
     mem[8..16].copy_from_slice(&10u64.to_le_bytes());
 
     let mut vm = rbpf::EbpfVmRaw::new(Some(&prog)).unwrap();
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     let mut exec_mem = alloc_exec_memory();
-    #[cfg(all(not(windows), not(feature = "std")))]
+    #[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
     vm.set_jit_exec_memory(&mut exec_mem).unwrap();
     vm.jit_compile().unwrap();
     unsafe {

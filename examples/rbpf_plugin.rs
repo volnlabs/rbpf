@@ -14,7 +14,10 @@ fn _unwind(a: u64, _b: u64, _c: u64, _d: u64, _e: u64) -> u64 {
 // It reads the program from stdin.
 fn main() {
     let mut args: Vec<String> = std::env::args().collect();
-    #[cfg_attr(not(feature = "std"), allow(unused_mut))] // in no_std, jit variable isn't mutated
+    #[cfg_attr(
+        not(all(target_arch = "x86_64", not(windows), feature = "std")),
+        allow(unused_mut)
+    )]
     let mut jit: bool = false;
     let mut cranelift: bool = false;
     let mut program_text = String::new();
@@ -38,12 +41,12 @@ fn main() {
                 return;
             }
             "--jit" => {
-                #[cfg(any(windows, not(feature = "std")))]
+                #[cfg(not(all(target_arch = "x86_64", not(windows), feature = "std")))]
                 {
                     println!("JIT not supported");
                     return;
                 }
-                #[cfg(all(not(windows), feature = "std"))]
+                #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
                 {
                     jit = true;
                 }
@@ -96,12 +99,12 @@ fn main() {
 
     let result: u64;
     if jit {
-        #[cfg(any(windows, not(feature = "std")))]
+        #[cfg(not(all(target_arch = "x86_64", not(windows), feature = "std")))]
         {
             println!("JIT not supported");
             return;
         }
-        #[cfg(all(not(windows), feature = "std"))]
+        #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
         {
             unsafe {
                 vm.jit_compile().unwrap();

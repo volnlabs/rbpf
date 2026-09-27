@@ -69,14 +69,14 @@ fn main() {
 
     let time;
 
-    #[cfg(all(not(windows), feature = "std"))]
+    #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
     {
         vm.jit_compile().unwrap();
 
         time = unsafe { vm.execute_program_jit().unwrap() };
     }
 
-    #[cfg(any(windows, not(feature = "std")))]
+    #[cfg(not(all(target_arch = "x86_64", not(windows), feature = "std")))]
     {
         time = vm.execute_program().unwrap();
     }

@@ -119,7 +119,7 @@ fn main() {
     println!("Packet #1, program returned: {res:?} ({res:#x})");
     assert_eq!(res, 0xffffffff);
 
-    #[cfg(not(windows))]
+    #[cfg(all(target_arch = "x86_64", not(windows)))]
     {
         vm.jit_compile().unwrap();
 
@@ -128,7 +128,7 @@ fn main() {
         assert_eq!(res, 0);
     }
 
-    #[cfg(windows)]
+    #[cfg(not(all(target_arch = "x86_64", not(windows))))]
     {
         let res = vm.execute_program(packet2).unwrap();
         println!("Packet #2, program returned: {:?} ({:#x})", res, res);

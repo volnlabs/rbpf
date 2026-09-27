@@ -38,8 +38,8 @@ tcpdump so as to avoid useless copies to user-space. It was ported to Linux,
 where it evolved into eBPF (_extended_ BPF), a faster version with more
 features. While BPF programs are originally intended to run in the kernel, the
 virtual machine of this crate enables running it in user-space applications;
-it contains an interpreter, an x86_64 JIT-compiler for eBPF programs, as well as
-a disassembler.
+it contains an interpreter, an x86_64 JIT-compiler, an optional low-level
+AArch64 compiler, and a disassembler.
 
 It is based on Rich Lane's [uBPF software](https://github.com/iovisor/ubpf/),
 which does nearly the same, but is written in C.
@@ -320,10 +320,10 @@ fn main() {
     // directly reads from packet data)
     let mut vm = rbpf::EbpfVmRaw::new(Some(prog)).unwrap();
 
-    #[cfg(any(windows, not(feature = "std")))] {
+    #[cfg(not(all(target_arch = "x86_64", not(windows), feature = "std")))] {
         assert_eq!(vm.execute_program(mem).unwrap(), 0x11);
     }
-    #[cfg(all(not(windows), feature = "std"))] {
+    #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))] {
         // This time we JIT-compile the program.
         vm.jit_compile().unwrap();
 
@@ -366,10 +366,10 @@ fn main() {
     // This eBPF VM is for program that use a metadata buffer.
     let mut vm = rbpf::EbpfVmMbuff::new(Some(prog)).unwrap();
 
-    #[cfg(any(windows, not(feature = "std")))] {
+    #[cfg(not(all(target_arch = "x86_64", not(windows), feature = "std")))] {
         assert_eq!(vm.execute_program(mem, mbuff).unwrap(), 0x2211);
     }
-    #[cfg(all(not(windows), feature = "std"))] {
+    #[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))] {
         // Here again we JIT-compile the program.
         vm.jit_compile().unwrap();
 
@@ -587,15 +587,77 @@ enabled-by-default features.
 rbpf = { version = "0.4.1", default-features = false }
 ```
 
-Note that when using this crate in `no_std` environments, the `jit` module
-isn't available. This is because it depends on functions provided by `libc`
-(`libc::posix_memalign()`, `libc::mprotect()`) which aren't available on
-`no_std`.
+On non-Windows x86_64, the existing JIT accepts caller-provided storage through
+`set_jit_exec_memory()` when `std` is disabled. The caller owns executable-memory
+permissions and lifetime. The optional AArch64 compiler below also supports
+`no_std`, without an operating-system allocator.
 
 The `assembler` module is available, albeit with reduced debugging features. It
 depends on the `combine` crate providing parser combinators. Under `no_std`
 this crate only provides simple parsers which generate less descriptive error
 messages.
+
+### `aarch64-jit`
+
+This fork provides an allocation-free, two-pass compiler through `rbpf::aarch64`.
+Enable `aarch64-jit` with or without `std`. Compilation works on any host;
+executing its output requires little-endian AArch64. The existing VM wrappers'
+`jit_compile()` methods remain specific to the handwritten x86_64 backend.
+
+```rust
+# #[cfg(feature = "aarch64-jit")]
+# fn main() {
+use rbpf::aarch64::{Aarch64Compiler, CompileOptions};
+
+// mov r0, 42; exit
+let program = [
+    0xb7, 0, 0, 0, 42, 0, 0, 0,
+    0x95, 0, 0, 0, 0, 0, 0, 0,
+];
+let mut offsets = [0u32; 2];
+let compiler = Aarch64Compiler::new(&program, CompileOptions {
+    max_instructions: 2,
+    max_code_size: 1024,
+    stack_size: 512,
+}, &mut offsets).unwrap();
+let mut output = [0u8; 1024];
+let info = compiler.emit_into(&mut output).unwrap();
+assert_eq!(info.code_len, compiler.code_len());
+// output contains machine code, but has not been made executable.
+# }
+# #[cfg(not(feature = "aarch64-jit"))]
+# fn main() {}
+```
+
+The supported subset includes canonical ALU32/64, signed/unsigned JMP/JMP32,
+wide immediates, memory-mode loads/stores, external helper calls, and exit.
+Only forward jumps are accepted. Loops, local calls, atomics, packet-load modes,
+and pseudo bindings reject. Division/modulo by zero returns a native error
+status. This intentionally differs from Linux's zero-divisor result convention.
+
+Generated arithmetic and branches execute natively. Memory and helper operations
+use `RuntimeCallbacks`; every callback failure immediately exits native code.
+`Invocation` carries the initial R1 context, caller-owned stack (R10 points to
+its top), opaque runtime state, callbacks, result, and faulting instruction.
+The caller initializes the BPF stack. Code and callback tables can be reused;
+mutable invocation state and its memory must obey the embedder's borrowing rules.
+
+The embedder must perform semantic verification, enforce memory/helper policies,
+transition writable/non-executable output to immutable executable memory,
+synchronize instruction caches, and keep the image alive until all executions
+finish. Structural compilation is not proof that arbitrary bytecode is safe.
+There is no executable allocator or automatic interpreter fallback in this API.
+See `tests/aarch64_jit.rs` for a Linux RW-to-RX execution harness.
+
+```sh
+cargo test --features aarch64-jit --test aarch64_jit
+cargo check --lib --target aarch64-unknown-none \
+  --no-default-features --features aarch64-jit
+```
+
+The test suite executes generated instructions on AArch64 Linux; other hosts run
+its structural/encoding checks. ARM64 CI runs the execution suite with and
+without default features.
 
 ## Feedback welcome!
 

@@ -86,7 +86,7 @@ use rbpf::lib::Error;
 // Cargo.toml file (see comments above), so here we use just the hardcoded bytecode instructions
 // instead.
 
-#[cfg(all(not(windows),not(feature="std")))]
+#[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
 fn alloc_exec_memory() -> Box<[u8]> {
     let size = 4096;
     let layout = std::alloc::Layout::from_size_align(size, 4096).unwrap();
@@ -194,7 +194,7 @@ fn test_vm_block_port() {
 }
 
 #[test]
-#[cfg(all(not(windows), feature = "std"))]
+#[cfg(all(target_arch = "x86_64", not(windows), feature = "std"))]
 fn test_jit_block_port() {
     // To load the bytecode from an object file instead of using the hardcoded instructions,
     // use the additional crates commented at the beginning of this file (and also add them to your
@@ -342,7 +342,7 @@ fn test_vm_mbuff_with_rust_api() {
 
 // Program and memory come from uBPF test ldxh.
 #[test]
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 fn test_jit_mbuff() {
     #[rustfmt::skip]
     let prog = &[
@@ -373,7 +373,7 @@ fn test_jit_mbuff() {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldabsb() {
     #[rustfmt::skip]
@@ -399,7 +399,7 @@ fn test_vm_jit_ldabsb() {
     };
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldabsh() {
     #[rustfmt::skip]
@@ -425,7 +425,7 @@ fn test_vm_jit_ldabsh() {
     };
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldabsw() {
     #[rustfmt::skip]
@@ -451,7 +451,7 @@ fn test_vm_jit_ldabsw() {
     };
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldabsdw() {
     #[rustfmt::skip]
@@ -510,7 +510,7 @@ fn test_vm_err_ldabsb_nomem() {
     // Memory check not implemented for JIT yet.
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldindb() {
     #[rustfmt::skip]
@@ -537,7 +537,7 @@ fn test_vm_jit_ldindb() {
     };
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldindh() {
     #[rustfmt::skip]
@@ -564,7 +564,7 @@ fn test_vm_jit_ldindh() {
     };
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldindw() {
     #[rustfmt::skip]
@@ -591,7 +591,7 @@ fn test_vm_jit_ldindw() {
     };
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldinddw() {
     #[rustfmt::skip]
@@ -755,7 +755,7 @@ fn test_vm_bpf_to_bpf_call() {
     assert_eq!(vm_res, 0x10);
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_bpf_to_bpf_call() {
     let test_code = assemble(
@@ -812,7 +812,7 @@ fn test_vm_other_type_call() {
     vm.execute_program().unwrap();
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 #[should_panic(expected = "[JIT] Error: unexpected call type #2 (insn #0)")]
 fn test_vm_jit_other_type_call() {

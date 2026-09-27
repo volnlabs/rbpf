@@ -51,6 +51,7 @@ hex = "0.4.3"
 [features]
 default = ["std"]
 std = ["dep:libc", "combine/std"]
+aarch64-jit = []
 cranelift = [
     "dep:cranelift-codegen",
     "dep:cranelift-frontend",

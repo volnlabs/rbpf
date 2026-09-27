@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: (Apache-2.0 OR MIT)
+#![cfg(all(target_arch = "x86_64", not(windows)))]
 extern crate rbpf;
 
 use rbpf::ebpf::{self, Insn};
 
-#[cfg(all(not(windows), not(feature = "std")))]
+#[cfg(all(target_arch = "x86_64", not(windows), not(feature = "std")))]
 fn alloc_exec_memory() -> Box<[u8]> {
     let size = 4096;
     let layout = std::alloc::Layout::from_size_align(size, 4096).unwrap();
@@ -18,7 +19,7 @@ fn alloc_exec_memory() -> Box<[u8]> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_jit_dry_run_resolves_jumps() {
     // Forward jump: dry-run sizing must walk resolve_jumps with write_enabled=false.
