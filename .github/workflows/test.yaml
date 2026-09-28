@@ -50,6 +50,9 @@ jobs:
       - name: Test on native AArch64
         run: cargo test ${{ matrix.features }}
 
+      - name: Test optimized AArch64 JIT and controller fixtures
+        run: cargo test --release --test aarch64_jit ${{ matrix.features }}
+
       - name: Check bare-metal compiler
         if: matrix.bare_metal
         run: |
