@@ -199,6 +199,33 @@ fn bounded_buffers_and_canaries() {
 }
 
 #[test]
+fn sparse_immediates_omit_zero_halfword_writes() {
+    let code_len = |value: u64| {
+        let program = bytes(&[
+            insn(ebpf::LD_DW_IMM, 0, 0, 0, value as i32),
+            insn(0, 0, 0, 0, (value >> 32) as i32),
+            insn(ebpf::EXIT, 0, 0, 0, 0),
+        ]);
+        let mut scratch = [0; 3];
+        let compiler = Aarch64Compiler::new(&program, options(3), &mut scratch).unwrap();
+        let mut code = vec![0; compiler.code_len()];
+        assert_eq!(compiler.emit_into(&mut code).unwrap().code_len, code.len());
+        code.len()
+    };
+    let full = code_len(0x1111_2222_3333_4444);
+    for (value, saved_words) in [
+        (0, 3),
+        (42, 3),
+        (0x1234_0000_0000_0000, 2),
+        (0x0000_1234_0000_5678, 2),
+        (0x0000_1234_5678_0000, 1),
+        (u64::MAX, 0),
+    ] {
+        assert_eq!(full - code_len(value), saved_words * 4, "{value:#x}");
+    }
+}
+
+#[test]
 fn rejects_invalid_options_and_checks_callback_branch_encoding() {
     let program = bytes(&[
         insn(ebpf::MOV64_IMM, 0, 0, 0, 1),
@@ -840,6 +867,38 @@ mod native {
             ],
             2,
         );
+    }
+
+    #[test]
+    fn sparse_immediates_clear_old_register_bits() {
+        for expected in [
+            0,
+            42,
+            0x1234_0000_0000_0000,
+            0x0000_1234_0000_5678,
+            0x0000_1234_5678_0000,
+            u64::MAX,
+        ] {
+            value(
+                &[
+                    insn(ebpf::MOV64_IMM, 0, 0, 0, -1),
+                    insn(ebpf::LD_DW_IMM, 0, 0, 0, expected as i32),
+                    insn(0, 0, 0, 0, (expected >> 32) as i32),
+                    insn(ebpf::EXIT, 0, 0, 0, 0),
+                ],
+                expected,
+            );
+        }
+        for expected in [0, 42, 0x1234_0000, 0xffff_ffff] {
+            value(
+                &[
+                    insn(ebpf::MOV64_IMM, 0, 0, 0, -1),
+                    insn(ebpf::MOV32_IMM, 0, 0, 0, expected as i32),
+                    insn(ebpf::EXIT, 0, 0, 0, 0),
+                ],
+                expected,
+            );
+        }
     }
 
     #[test]

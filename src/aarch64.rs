@@ -479,6 +479,10 @@ impl<'a> Sink<'a> {
     fn imm(&mut self, dst: u8, value: u64, wide: bool) -> Result<(), JitError> {
         let sf = if wide { 0x80000000 } else { 0 };
         for part in 0..if wide { 4 } else { 2 } {
+            // MOVZ clears the other halfwords; only nonzero parts need MOVK.
+            if part != 0 && (value >> (part * 16)) & 0xffff == 0 {
+                continue;
+            }
             let op = if part == 0 { 0x52800000 } else { 0x72800000 };
             self.word(
                 sf | op
