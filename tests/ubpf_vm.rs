@@ -967,7 +967,7 @@ fn test_vm_jset_imm() {
 }
 
 #[test]
-fn test_vm_jmp_unsigned_extend() {
+fn test_vm_jmp_immediate_sign_extend() {
     use rbpf::ebpf::{Insn, BE, EXIT, JEQ_IMM, LD_W_REG, MOV32_IMM};
 
     // the insn `jeq r2, 0x80000000, +2` will be rejected
@@ -975,7 +975,7 @@ fn test_vm_jmp_unsigned_extend() {
     // the prog is as follows:
     //    ldxw r2, [r1]
     //    be32 r2
-    //    jeq r2, 0x80000000, +2 # 0x80000000 should be interpreted as 0x0000000080000000 (unsigned)
+    //    jeq r2, 0x80000000, +2 # the immediate is sign-extended to 0xffffffff80000000
     //    mov32 r0, 2
     //    exit
     //    mov32 r0, 1
@@ -994,7 +994,7 @@ fn test_vm_jmp_unsigned_extend() {
     let prog = insns.iter().flat_map(|x| x.to_array()).collect::<Vec<u8>>();
     let vm = rbpf::EbpfVmRaw::new(Some(&prog)).unwrap();
     let mut data = vec![0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    assert_eq!(vm.execute_program(&mut data).unwrap(), 1);
+    assert_eq!(vm.execute_program(&mut data).unwrap(), 2);
 }
 
 #[test]
