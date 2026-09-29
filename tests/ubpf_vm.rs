@@ -584,6 +584,20 @@ fn test_vm_mod64_by_zero_imm() {
 }
 
 #[test]
+fn test_vm_mod32_by_zero_clears_upper_bits() {
+    for divisor in [0u64, 0x1_0000_0000] {
+        for instruction in ["mod32 r0, 0", "mod32 r0, r1"] {
+            let prog = assemble(&format!(
+                "lddw r0, 0x1234567887654321\nlddw r1, {divisor:#x}\n{instruction}\nexit"
+            ))
+            .unwrap();
+            let vm = rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+            assert_eq!(vm.execute_program().unwrap(), 0x8765_4321, "{instruction}");
+        }
+    }
+}
+
+#[test]
 fn test_vm_mod_by_zero_imm() {
     let prog = assemble(
         "
