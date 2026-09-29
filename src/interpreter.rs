@@ -381,7 +381,7 @@ pub fn execute_program(
             ebpf::LSH64_REG  => reg[_dst] <<= reg[_src] & SHIFT_MASK_64,
             ebpf::RSH64_IMM  => reg[_dst] >>= insn.imm as u64 & SHIFT_MASK_64,
             ebpf::RSH64_REG  => reg[_dst] >>= reg[_src] & SHIFT_MASK_64,
-            ebpf::NEG64      => reg[_dst] = -(reg[_dst] as i64) as u64,
+            ebpf::NEG64      => reg[_dst] = reg[_dst].wrapping_neg(),
             ebpf::MOD64_IMM if insn.imm == 0 => (),
             ebpf::MOD64_IMM  => reg[_dst] %=  insn.imm as u64,
             ebpf::MOD64_REG if reg[_src] == 0 => (),
