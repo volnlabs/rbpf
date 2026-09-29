@@ -199,7 +199,7 @@ fn bounded_buffers_and_canaries() {
 }
 
 #[test]
-fn sparse_immediates_omit_zero_halfword_writes() {
+fn compact_immediates_use_fewer_halfword_writes() {
     let code_len = |value: u64| {
         let program = bytes(&[
             insn(ebpf::LD_DW_IMM, 0, 0, 0, value as i32),
@@ -219,7 +219,10 @@ fn sparse_immediates_omit_zero_halfword_writes() {
         (0x1234_0000_0000_0000, 2),
         (0x0000_1234_0000_5678, 2),
         (0x0000_1234_5678_0000, 1),
-        (u64::MAX, 0),
+        (u64::MAX, 3),
+        ((-8i64) as u64, 3),
+        ((-65536i64) as u64, 3),
+        ((-65537i64) as u64, 0),
     ] {
         assert_eq!(full - code_len(value), saved_words * 4, "{value:#x}");
     }
@@ -892,7 +895,7 @@ mod native {
     }
 
     #[test]
-    fn sparse_immediates_clear_old_register_bits() {
+    fn compact_immediates_clear_old_register_bits() {
         for expected in [
             0,
             42,
@@ -900,6 +903,9 @@ mod native {
             0x0000_1234_0000_5678,
             0x0000_1234_5678_0000,
             u64::MAX,
+            (-8i64) as u64,
+            (-65536i64) as u64,
+            (-65537i64) as u64,
         ] {
             value(
                 &[

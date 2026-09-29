@@ -483,6 +483,10 @@ impl<'a> Sink<'a> {
     }
 
     fn imm(&mut self, dst: u8, value: u64, wide: bool) -> Result<(), JitError> {
+        // One MOVN covers values whose upper 48 bits are all ones.
+        if wide && value >> 16 == u64::MAX >> 16 {
+            return self.word(0x92800000 | ((!value as u32 & 0xffff) << 5) | u32::from(dst));
+        }
         let sf = if wide { 0x80000000 } else { 0 };
         for part in 0..if wide { 4 } else { 2 } {
             // MOVZ clears the other halfwords; only nonzero parts need MOVK.
