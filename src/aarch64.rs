@@ -34,14 +34,18 @@ pub const NO_FAULT: u64 = u64::MAX;
 pub type HelperCallback = unsafe extern "C" fn(*mut c_void, u32, *const u64, *mut u64) -> u32;
 /// Checked read: opaque state, base, signed offset, byte width, R10-base flag, output.
 ///
-/// Width is 1, 2, 4 or 8; the R10 flag is 0 or 1. Validate the effective address
-/// and its complete readable extent before dereferencing. On success write the
-/// zero-extended value and return zero. Do not retain output or unwind.
+/// Width is 1, 2, 4 or 8. The flag is 1 only when the instruction names R10
+/// as its base; a stack pointer copied to another register has flag 0. Validate
+/// the effective address and its complete readable extent regardless of the flag.
+/// On success write the zero-extended value and return zero. Do not retain output
+/// or unwind.
 pub type LoadCallback = unsafe extern "C" fn(*mut c_void, u64, i64, u32, u32, *mut u64) -> u32;
 /// Checked write: opaque state, base, signed offset, byte width, R10-base flag, value.
 ///
-/// Validate the effective address, permissions and complete writable extent;
-/// store the low width bytes. Return zero on success and do not unwind.
+/// The R10-base flag describes the instruction's base register, not pointer
+/// provenance. Validate the effective address, permissions and complete writable
+/// extent regardless of the flag; store the low width bytes. Return zero on
+/// success and do not unwind.
 pub type StoreCallback = unsafe extern "C" fn(*mut c_void, u64, i64, u32, u32, u64) -> u32;
 
 /// Trusted callbacks, borrowed for an entire native invocation.
@@ -66,7 +70,8 @@ pub struct Invocation {
     pub context: *const u8,
     /// Borrowed writable BPF stack, already initialized by the embedder.
     pub stack: *mut u8,
-    /// Accessible stack bytes; must cover the compiled stack_size.
+    /// Accessible stack bytes; must cover the compiled stack_size. R10 uses the
+    /// compiled extent even when this length is larger.
     pub stack_len: usize,
     /// Invocation-local state passed to callbacks.
     pub opaque: *mut c_void,
@@ -88,6 +93,7 @@ pub struct Invocation {
 /// remain valid and exclusively accessible as required for the entire call.
 /// Callback code must implement the verifier's memory/helper policy and cannot
 /// unwind. The compiler's structural validation alone does not establish safety.
+/// The caller must enforce callback latency bounds externally.
 pub type NativeEntry = unsafe extern "C" fn(*mut Invocation) -> u32;
 
 /// Embedder-owned resource bounds. No memory is allocated by the compiler.

@@ -1179,9 +1179,9 @@ mod native {
             },
         );
         let mut state = State::default();
-        let mut stack = [0u8; 8192];
+        let mut stack = [0u8; 8192 + 16];
         let context = [0u8; 8];
-        state.stack_top = stack.as_mut_ptr() as u64 + stack.len() as u64;
+        state.stack_top = stack.as_mut_ptr() as u64 + 8192;
         let mut invocation = Invocation {
             context: context.as_ptr(),
             stack: stack.as_mut_ptr(),
@@ -1200,5 +1200,73 @@ mod native {
             (state.load_calls, state.store_calls, state.bad_call),
             (1, 1, false)
         );
+    }
+
+    #[test]
+    fn copied_stack_pointer_has_no_r10_flag_and_still_needs_bounds_check() {
+        unsafe extern "C" fn checked_load(
+            opaque: *mut c_void,
+            base: u64,
+            offset: i64,
+            width: u32,
+            is_frame_pointer: u32,
+            out: *mut u64,
+        ) -> u32 {
+            let state = unsafe { &mut *opaque.cast::<State>() };
+            state.load_calls += 1;
+            let address = base.checked_add_signed(offset);
+            let end = address.and_then(|address| address.checked_add(u64::from(width)));
+            if is_frame_pointer != 0
+                || width != 8
+                || !matches!((address, end), (Some(start), Some(end)) if start >= state.stack_top - 512 && end <= state.stack_top)
+            {
+                state.bad_call = true;
+                return STATUS_CALLBACK_ERROR;
+            }
+            unsafe { *out = (address.unwrap() as *const u64).read_unaligned() };
+            STATUS_OK
+        }
+
+        let callbacks = RuntimeCallbacks {
+            helper,
+            load: checked_load,
+            store,
+        };
+        let mut state = State::default();
+        let mut stack = [0u8; 512];
+        stack[504..].copy_from_slice(&0x123456789abcdef0u64.to_le_bytes());
+        state.stack_top = stack.as_mut_ptr() as u64 + stack.len() as u64;
+        let context = [0u8; 8];
+        let mut invocation = Invocation {
+            context: context.as_ptr(),
+            stack: stack.as_mut_ptr(),
+            stack_len: stack.len(),
+            opaque: (&mut state as *mut State).cast(),
+            callbacks: &callbacks,
+            result: 0,
+            fault_pc: NO_FAULT,
+        };
+        for (offset, expected) in [
+            (8, (STATUS_OK, 0x123456789abcdef0, NO_FAULT, false)),
+            (16, (STATUS_CALLBACK_ERROR, 0, 2, true)),
+        ] {
+            let image = Image::compile(&[
+                insn(ebpf::MOV64_REG, 2, 10, 0, 0),
+                insn(ebpf::ADD64_IMM, 2, 0, 0, -16),
+                insn(ebpf::LD_DW_REG, 0, 2, offset, 0),
+                insn(ebpf::EXIT, 0, 0, 0, 0),
+            ]);
+            let status = unsafe { (image.entry())(&mut invocation) };
+            assert_eq!(
+                (
+                    status,
+                    invocation.result,
+                    invocation.fault_pc,
+                    state.bad_call
+                ),
+                expected
+            );
+        }
+        assert_eq!(state.load_calls, 2);
     }
 }
