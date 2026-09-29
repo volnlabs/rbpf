@@ -447,6 +447,8 @@ mod native {
         fail: bool,
         bad_call: bool,
         stack_top: u64,
+        expected_helper: Option<(u32, [u64; 5], u64)>,
+        helper_failure_code: Option<u32>,
     }
 
     unsafe extern "C" fn helper(
@@ -460,13 +462,25 @@ mod native {
         if state.fail {
             return STATUS_CALLBACK_ERROR;
         }
-        if id != 7 {
+        if id != state.expected_helper.map_or(7, |expected| expected.0) {
             state.bad_call = true;
             return STATUS_CALLBACK_ERROR;
         }
         let args = unsafe { core::slice::from_raw_parts(args, 5) };
+        if let Some((_, expected_args, _)) = state.expected_helper
+            && args != expected_args
+        {
+            state.bad_call = true;
+            return STATUS_CALLBACK_ERROR;
+        }
+        if let Some(code) = state.helper_failure_code {
+            return code;
+        }
         unsafe {
-            *out = args.iter().fold(0u64, |sum, arg| sum.wrapping_add(*arg));
+            *out = state.expected_helper.map_or_else(
+                || args.iter().fold(0u64, |sum, arg| sum.wrapping_add(*arg)),
+                |expected| expected.2,
+            );
         }
         STATUS_OK
     }
@@ -1013,31 +1027,84 @@ mod native {
         );
         assert_eq!((status, result, fault), (STATUS_CALLBACK_ERROR, 0, 1));
         assert_eq!((failed.store_calls, failed.helper_calls), (1, 0));
+    }
 
-        let mut state = State::default();
+    #[test]
+    fn helper_callback_keeps_argument_order_and_callee_saved_registers() {
+        let helper_result = 0x1234_5678_9abc_0000u64;
+        let image = Image::compile(&[
+            insn(ebpf::MOV64_IMM, 1, 0, 0, -17),
+            insn(ebpf::MOV64_IMM, 2, 0, 0, 0x1234_5678),
+            insn(ebpf::MOV64_IMM, 3, 0, 0, 3),
+            insn(ebpf::MOV64_IMM, 4, 0, 0, 0x40000),
+            insn(ebpf::MOV64_IMM, 5, 0, 0, -5),
+            insn(ebpf::MOV64_IMM, 6, 0, 0, 6),
+            insn(ebpf::MOV64_IMM, 7, 0, 0, 7),
+            insn(ebpf::MOV64_IMM, 8, 0, 0, 8),
+            insn(ebpf::MOV64_IMM, 9, 0, 0, 9),
+            insn(ebpf::CALL, 0, 0, 0, 1009),
+            insn(ebpf::ADD64_REG, 0, 6, 0, 0),
+            insn(ebpf::ADD64_REG, 0, 7, 0, 0),
+            insn(ebpf::ADD64_REG, 0, 8, 0, 0),
+            insn(ebpf::ADD64_REG, 0, 9, 0, 0),
+            insn(ebpf::EXIT, 0, 0, 0, 0),
+        ]);
+        let mut state = State {
+            expected_helper: Some((
+                1009,
+                [(-17i64) as u64, 0x1234_5678, 3, 0x40000, (-5i64) as u64],
+                helper_result,
+            )),
+            ..State::default()
+        };
+        let context = [0u8; 8];
+        let mut stack = [0u8; 512];
+        let mut invocation = Invocation {
+            context: context.as_ptr(),
+            stack: stack.as_mut_ptr(),
+            stack_len: stack.len(),
+            opaque: (&mut state as *mut State).cast(),
+            callbacks: &CALLBACKS,
+            result: 0xBAD,
+            fault_pc: 0,
+        };
+        let mut status = u32::MAX;
+        let changed = unsafe { rbpf_test_preserved(image.entry(), &mut invocation, &mut status) };
+        assert_eq!(
+            changed, 0,
+            "generated helper call changed a host callee-saved register"
+        );
+        assert_eq!(
+            (status, invocation.result, invocation.fault_pc),
+            (STATUS_OK, helper_result + 6 + 7 + 8 + 9, NO_FAULT)
+        );
+        assert_eq!((state.helper_calls, state.bad_call), (1, false));
+    }
+
+    #[test]
+    fn helper_failure_stops_before_store_or_second_call() {
+        let mut state = State {
+            expected_helper: Some((1009, [7, 0, 0, 0, 0], 0)),
+            helper_failure_code: Some(0xBEEF),
+            ..State::default()
+        };
         let (status, result, fault) = run(
             &[
-                insn(ebpf::MOV64_IMM, 1, 0, 0, 1),
-                insn(ebpf::MOV64_IMM, 2, 0, 0, 2),
-                insn(ebpf::MOV64_IMM, 3, 0, 0, 3),
-                insn(ebpf::MOV64_IMM, 4, 0, 0, 4),
-                insn(ebpf::MOV64_IMM, 5, 0, 0, 5),
-                insn(ebpf::MOV64_IMM, 6, 0, 0, 6),
-                insn(ebpf::MOV64_IMM, 7, 0, 0, 7),
-                insn(ebpf::MOV64_IMM, 8, 0, 0, 8),
-                insn(ebpf::MOV64_IMM, 9, 0, 0, 9),
-                insn(ebpf::CALL, 0, 0, 0, 7),
-                insn(ebpf::ADD64_REG, 0, 6, 0, 0),
-                insn(ebpf::ADD64_REG, 0, 7, 0, 0),
-                insn(ebpf::ADD64_REG, 0, 8, 0, 0),
-                insn(ebpf::ADD64_REG, 0, 9, 0, 0),
+                insn(ebpf::MOV64_IMM, 0, 0, 0, 42),
+                insn(ebpf::MOV64_IMM, 1, 0, 0, 7),
+                insn(ebpf::CALL, 0, 0, 0, 1009),
+                insn(ebpf::ST_B_IMM, 1, 0, 0, 1),
+                insn(ebpf::CALL, 0, 0, 0, 1009),
                 insn(ebpf::EXIT, 0, 0, 0, 0),
             ],
             &mut state,
         );
-        assert_eq!((status, result, fault), (STATUS_OK, 45, NO_FAULT));
-        assert_eq!(state.helper_calls, 1);
-        assert!(!state.bad_call);
+        assert_eq!((status, result, fault), (STATUS_CALLBACK_ERROR, 0, 2));
+        assert_eq!(
+            (state.helper_calls, state.store_calls, state.bad_call),
+            (1, 0, false)
+        );
+        assert_eq!(state.bytes, [0; 16]);
     }
 
     #[test]
