@@ -128,7 +128,7 @@ pub fn execute_program(
         let _src = insn.src as usize;
 
         let mut do_jump = || {
-            insn_ptr = (insn_ptr as i16 + insn.off) as usize;
+            insn_ptr = insn_ptr.wrapping_add_signed(isize::from(insn.off));
         };
 
         // JMP64 immediates are sign-extended from i32 before unsigned comparison.
