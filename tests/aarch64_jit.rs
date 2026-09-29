@@ -272,6 +272,10 @@ fn rejects_invalid_options_and_checks_callback_branch_encoding() {
 }
 
 #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+#[path = "aarch64/managed.rs"]
+mod managed;
+
+#[cfg(all(target_arch = "aarch64", target_os = "linux"))]
 mod native {
     use super::*;
     use core::arch::global_asm;
@@ -372,7 +376,7 @@ mod native {
         ) -> u32;
     }
 
-    struct Image {
+    pub(super) struct Image {
         ptr: *mut c_void,
         len: usize,
         entry_offset: usize,
@@ -385,8 +389,12 @@ mod native {
 
         fn compile_with(insns: &[Insn], opts: CompileOptions) -> Self {
             let program = bytes(insns);
-            let mut scratch = vec![0u32; insns.len()];
-            let compiler = Aarch64Compiler::new(&program, opts, &mut scratch).unwrap();
+            Self::compile_bytes(&program, opts)
+        }
+
+        pub(super) fn compile_bytes(program: &[u8], opts: CompileOptions) -> Self {
+            let mut scratch = vec![0u32; program.len() / ebpf::INSN_SIZE];
+            let compiler = Aarch64Compiler::new(program, opts, &mut scratch).unwrap();
             let mut code = vec![0u8; compiler.code_len()];
             let info = compiler.emit_into(&mut code).unwrap();
             assert_eq!(info.code_len, code.len());
@@ -427,7 +435,7 @@ mod native {
             }
         }
 
-        unsafe fn entry(&self) -> NativeEntry {
+        pub(super) unsafe fn entry(&self) -> NativeEntry {
             unsafe { core::mem::transmute(self.ptr.cast::<u8>().add(self.entry_offset)) }
         }
     }
