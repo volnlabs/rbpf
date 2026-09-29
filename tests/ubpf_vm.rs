@@ -2316,6 +2316,21 @@ fn test_vm_mul_loop() {
 }
 
 #[test]
+fn test_vm_neg64_boundaries() {
+    for (value, expected) in [
+        (0u64, 0u64),
+        (1, u64::MAX),
+        (u64::MAX, 1),
+        (0x8000_0000_0000_0000, 0x8000_0000_0000_0000),
+        (0x7fff_ffff_ffff_ffff, 0x8000_0000_0000_0001),
+    ] {
+        let prog = assemble(&format!("lddw r0, {value:#x}\nneg64 r0\nexit")).unwrap();
+        let vm = rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+        assert_eq!(vm.execute_program().unwrap(), expected, "input {value:#x}");
+    }
+}
+
+#[test]
 fn test_vm_neg64() {
     let prog = assemble(
         "
