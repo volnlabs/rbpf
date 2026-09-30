@@ -45,7 +45,7 @@ fn check_prog_len(prog: &[u8]) -> Result<(), Error> {
         reject("no program set, call set_program() to load one")?;
     }
     let last_opc = ebpf::get_insn(prog, (prog.len() / ebpf::INSN_SIZE) - 1).opc;
-    if last_opc & ebpf::BPF_CLS_MASK != ebpf::BPF_JMP {
+    if last_opc != ebpf::EXIT && last_opc != ebpf::JA {
         reject("program does not end with “EXIT” instruction")?;
     }
 
