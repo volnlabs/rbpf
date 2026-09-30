@@ -755,6 +755,22 @@ fn test_vm_bpf_to_bpf_call() {
     assert_eq!(vm_res, 0x10);
 }
 
+#[test]
+fn test_vm_bpf_to_bpf_backward_call() {
+    let test_code = assemble(
+        "
+        ja +2
+        mov64 r0, 0x2a
+        exit
+        callx -3
+        exit
+        ",
+    )
+    .unwrap();
+    let vm = rbpf::EbpfVmNoData::new(Some(&test_code)).unwrap();
+    assert_eq!(vm.execute_program().unwrap(), 0x2a);
+}
+
 #[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_bpf_to_bpf_call() {
