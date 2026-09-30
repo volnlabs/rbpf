@@ -35,7 +35,10 @@ fn check_mem(
         if stack.as_ptr() as u64 <= addr && addr_end <= stack.as_ptr() as u64 + stack.len() as u64 {
             return Ok(());
         }
-        if allowed_memory.iter().any(|range| range.contains(&addr)) {
+        if allowed_memory
+            .iter()
+            .any(|range| range.contains(&addr) && addr_end <= range.end)
+        {
             return Ok(());
         }
     }

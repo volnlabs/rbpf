@@ -654,6 +654,33 @@ fn test_vm_err_ldindb_nomem() {
 }
 
 #[test]
+fn test_vm_allowed_memory_rejects_crossing_load() {
+    let backing = [0x5au8; 16];
+    let start = backing.as_ptr() as u64;
+    let prog = assemble(&format!("lddw r1, 0x{start:x}\nldxdw r0, [r1]\nexit")).unwrap();
+    let mut vm = rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+    vm.register_allowed_memory(start..start + 4);
+
+    assert!(vm.execute_program().is_err());
+}
+
+#[test]
+fn test_vm_allowed_memory_rejects_crossing_store() {
+    let mut backing = [0x5au8; 16];
+    let original = backing;
+    let start = backing.as_mut_ptr() as u64;
+    let prog = assemble(&format!(
+        "lddw r1, 0x{start:x}\nstdw [r1], 0x44332211\nexit"
+    ))
+    .unwrap();
+    let mut vm = rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+    vm.register_allowed_memory(start..start + 4);
+
+    assert!(vm.execute_program().is_err());
+    assert_eq!(backing, original);
+}
+
+#[test]
 #[should_panic(expected = "Error: No program set, call prog_set() to load one")]
 fn test_vm_exec_no_program() {
     let vm = rbpf::EbpfVmNoData::new(None).unwrap();
