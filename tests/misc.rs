@@ -833,6 +833,27 @@ fn test_vm_jit_other_type_call() {
 }
 
 #[test]
+fn test_stack_usage_ignores_helper_calls() {
+    let prog = assemble(
+        "
+        call 0
+        exit
+        ",
+    )
+    .unwrap();
+    let mut vm = rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+
+    vm.set_stack_usage_calculator(
+        |_, pc, _| {
+            assert_eq!(pc, 0);
+            16
+        },
+        Box::new(()),
+    )
+    .unwrap();
+}
+
+#[test]
 #[should_panic(expected = "Error: out of bounds memory store (insn #8)")]
 fn test_stack_overflow() {
     // The stdw instruction is used to test the stack overflow.
