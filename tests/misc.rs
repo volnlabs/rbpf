@@ -373,6 +373,25 @@ fn test_jit_mbuff() {
     }
 }
 
+#[test]
+fn test_vm_packet_loads_check_instruction_width() {
+    let cases = [
+        ("ldabsb 0\nexit", 1, 0x11),
+        ("ldabsh 0\nexit", 2, 0x1111),
+        ("ldabsw 0\nexit", 4, 0x11111111),
+        ("mov64 r1, 0\nldindb r1, 0\nexit", 1, 0x11),
+        ("mov64 r1, 0\nldindh r1, 0\nexit", 2, 0x1111),
+        ("mov64 r1, 0\nldindw r1, 0\nexit", 4, 0x11111111),
+    ];
+
+    for (program, width, expected) in cases {
+        let program = assemble(program).unwrap();
+        let mut packet = vec![0x11; width];
+        let vm = rbpf::EbpfVmRaw::new(Some(&program)).unwrap();
+        assert_eq!(vm.execute_program(&mut packet).unwrap(), expected);
+    }
+}
+
 #[cfg(all(target_arch = "x86_64", not(windows)))]
 #[test]
 fn test_vm_jit_ldabsb() {
