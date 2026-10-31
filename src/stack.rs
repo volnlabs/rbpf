@@ -98,7 +98,7 @@ impl StackVerifier {
         stack_usage.insert(0, ty);
         for idx in 0..prog.len() / ebpf::INSN_SIZE {
             let insn = ebpf::get_insn(prog, idx);
-            if insn.opc == ebpf::CALL {
+            if insn.opc == ebpf::CALL && insn.src == 1 {
                 let dst_insn_ptr = idx as isize + 1 + insn.imm as isize;
                 let ty = self.calculate_stack_usage_for_local_func(prog, dst_insn_ptr as usize)?;
                 stack_usage.insert(dst_insn_ptr as usize, ty);
