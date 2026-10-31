@@ -478,7 +478,7 @@ pub fn execute_program(
                         // that read or write to the stack, check_mem_load or check_mem_store will return an error.
                         reg[10] -= stacks[stack_frame_idx].get_stack_usage().stack_usage() as u64;
                         stack_frame_idx += 1;
-                        insn_ptr += insn.imm as usize;
+                        insn_ptr = insn_ptr.wrapping_add_signed(insn.imm as isize);
                     }
                     _ => {
                         Err(Error::other(
