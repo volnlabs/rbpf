@@ -144,6 +144,19 @@ fn test_verifier_err_no_exit_backward_jump() {
 }
 
 #[test]
+#[should_panic(expected = "[Verifier] Error: program does not end with “EXIT” instruction")]
+fn test_verifier_err_conditional_jump_at_end() {
+    let prog = assemble(
+        "
+        mov r0, 1
+        jeq r0, 0, -2",
+    )
+    .unwrap();
+    let vm = rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+    vm.execute_program().unwrap();
+}
+
+#[test]
 #[should_panic(expected = "[Verifier] Error: eBPF program length limited to 1000000, here 1000001")]
 fn test_verifier_err_too_many_instructions() {
     // uBPF uses 65637 instructions, because it sets its limit at 65636.
