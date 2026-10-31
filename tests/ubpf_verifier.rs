@@ -200,6 +200,20 @@ fn test_verifier_err_funcall_over_the_end() {
 }
 
 #[test]
+#[should_panic(expected = "[Verifier] Error: call to middle of LD_DW at #2 (insn #0)")]
+fn test_verifier_err_funcall_lddw() {
+    let prog = assemble(
+        "
+        callx 1
+        lddw r0, 0x1122334455667788
+        exit
+        ",
+    )
+    .unwrap();
+    rbpf::EbpfVmNoData::new(Some(&prog)).unwrap();
+}
+
+#[test]
 #[should_panic(expected = "[Verifier] Error: atomic operations other than legacy XADD are not supported (insn #0)")]
 fn test_verifier_err_atomic_fetch_add() {
     // ST_W_XADD with imm = EBPF_ALU_OP_ADD | FETCH (newer atomic, not legacy XADD).
